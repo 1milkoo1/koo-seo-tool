@@ -4,7 +4,7 @@ import re
 import random
 import io
 
-# --- [중요] 1. 보안 설정 (이 부분이 맨 위에 있어야 합니다) ---
+# --- 1. 보안 설정 (비밀번호) ---
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state.password_correct = False
@@ -14,10 +14,11 @@ def check_password():
 
     st.set_page_config(page_title="🔒 보안 접속", layout="centered")
     st.title("🔒 KOO SEO 가공툴 접속")
+    st.write("승인된 사용자만 이용 가능한 페이지입니다.")
     
     password = st.text_input("비밀번호를 입력하세요", type="password")
-    if st.button("접속하기"):
-        if password == "1234": # <--- 비밀번호를 바꾸려면 여기를 수정하세요!
+    if st.button("접속하기", use_container_width=True):
+        if password == "1234": # <--- 비밀번호를 바꾸려면 이 숫자만 수정하세요!
             st.session_state.password_correct = True
             st.rerun()
         else:
@@ -27,7 +28,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- 2. 가공 설정 및 로직 ---
+# --- 2. 가공 데이터 및 로직 ---
 FORBIDDEN_WORDS = ['돌돌이', '벨루아', '라떼', '이지라이프', '굿라이프', '슈슈앤', '플랜홈', '원마운트', '액티브원', '라테', '네추럴', '잔플라워', '그레타', '이지', '라이프홈']
 CORE_ITEMS = ['정리함', '수납박스', '수납함', '스틱', '썬캡', '버킷햇', '거치대', '보관함', '트레이', '케이스', '머플러', '거울', '물주머니', '찜질팩', '안대', '마스크', '등산스틱']
 COLORS = ['화이트', '블랙', '그레이', '아이보리', '베이지', '투명', '블루', '핑크', '그린', '레드', '옐로우', '네이비', '오렌지', '차콜', '스카이', '퍼플', '옐로', '브라운', '스노우']
@@ -78,25 +79,37 @@ def advanced_refine_engine(row, p_col, k_col):
         return refine_final_naming(" ".join(seo_list), raw_p)
     except: return raw_p
 
-# --- 3. 앱 화면 구성 ---
+# --- 3. 메인 화면 ---
 st.title("🧚 KOO전용 SEO 상품명 가공 마스터")
 uploaded_file = st.file_uploader("가공할 엑셀 파일을 업로드하세요", type=["xlsx"])
+
 if uploaded_file:
     df_raw = pd.read_excel(uploaded_file)
     row_count = len(df_raw)
     cols = df_raw.columns.tolist()
     p_col = next((c for c in cols if '상품명' in str(c) and '최종' not in str(c)), None)
     k_col = next((c for c in cols if '키워드' in str(c)), None)
+    
     if p_col and k_col:
-        col1, col2 = st.columns([1, 4])
-        with col1: process_btn = st.button(" ✨ 무한 셔플 시작! ")
-        with col2: st.markdown(f"**<div style='padding-top: 10px;'>📂 현재 가공 대기 리스트: {row_count:,}개</div>**", unsafe_allow_html=True)
+        # 가공 대기 정보 출력
+        st.info(f"📂 현재 가공 대기 리스트: {row_count:,}개")
+        
+        # [수정됨] 버튼을 가로로 꽉 차게 만들어 글자 잘림 방지
+        process_btn = st.button("✨ 무한 랜덤조합 가공 시작", use_container_width=True)
+        
         if process_btn:
             with st.spinner(f'{row_count:,}개의 상품명을 SEO 최적화 중입니다...'):
                 df_raw['최종_조합_상품명'] = df_raw.apply(lambda row: advanced_refine_engine(row, p_col, k_col), axis=1)
                 st.success(f"✅ 총 {row_count:,}개 리스트 가공 완료!")
                 st.dataframe(df_raw[[p_col, '최종_조합_상품명']], use_container_width=True)
+                
+                # 다운로드 버튼
                 out = io.BytesIO()
                 with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
                     df_raw.to_excel(writer, index=False)
-                st.download_button("📥 가공 결과 다운로드", out.getvalue(), f"KOO_SEO_Result.xlsx")
+                st.download_button(
+                    label="📥 가공 결과 다운로드",
+                    data=out.getvalue(),
+                    file_name=f"KOO_SEO_Result.xlsx",
+                    use_container_width=True
+                )
