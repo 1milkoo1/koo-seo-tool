@@ -4,7 +4,30 @@ import re
 import random
 import io
 
-# 1. 환경 설정
+# --- [중요] 1. 보안 설정 (이 부분이 맨 위에 있어야 합니다) ---
+def check_password():
+    if "password_correct" not in st.session_state:
+        st.session_state.password_correct = False
+
+    if st.session_state.password_correct:
+        return True
+
+    st.set_page_config(page_title="🔒 보안 접속", layout="centered")
+    st.title("🔒 KOO SEO 가공툴 접속")
+    
+    password = st.text_input("비밀번호를 입력하세요", type="password")
+    if st.button("접속하기"):
+        if password == "1234": # <--- 비밀번호를 바꾸려면 여기를 수정하세요!
+            st.session_state.password_correct = True
+            st.rerun()
+        else:
+            st.error("비밀번호가 틀렸습니다.")
+    return False
+
+if not check_password():
+    st.stop()
+
+# --- 2. 가공 설정 및 로직 ---
 FORBIDDEN_WORDS = ['돌돌이', '벨루아', '라떼', '이지라이프', '굿라이프', '슈슈앤', '플랜홈', '원마운트', '액티브원', '라테', '네추럴', '잔플라워', '그레타', '이지', '라이프홈']
 CORE_ITEMS = ['정리함', '수납박스', '수납함', '스틱', '썬캡', '버킷햇', '거치대', '보관함', '트레이', '케이스', '머플러', '거울', '물주머니', '찜질팩', '안대', '마스크', '등산스틱']
 COLORS = ['화이트', '블랙', '그레이', '아이보리', '베이지', '투명', '블루', '핑크', '그린', '레드', '옐로우', '네이비', '오렌지', '차콜', '스카이', '퍼플', '옐로', '브라운', '스노우']
@@ -55,7 +78,7 @@ def advanced_refine_engine(row, p_col, k_col):
         return refine_final_naming(" ".join(seo_list), raw_p)
     except: return raw_p
 
-st.set_page_config(page_title="KOO SEO 가공툴", layout="wide")
+# --- 3. 앱 화면 구성 ---
 st.title("🧚 KOO전용 SEO 상품명 가공 마스터")
 uploaded_file = st.file_uploader("가공할 엑셀 파일을 업로드하세요", type=["xlsx"])
 if uploaded_file:
