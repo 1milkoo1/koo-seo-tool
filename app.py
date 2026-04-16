@@ -95,7 +95,7 @@ if uploaded_file:
         st.info(f"📂 현재 가공 대기 리스트: {row_count:,}개")
         
         # [수정됨] 버튼을 가로로 꽉 차게 만들어 글자 잘림 방지
-        process_btn = st.button("✨ 무한 랜덤조합 가공 시작", use_container_width=True)
+        process_btn = st.button("✨ 무한 셔플 가공 시작", use_container_width=True)
         
         if process_btn:
             with st.spinner(f'{row_count:,}개의 상품명을 SEO 최적화 중입니다...'):
