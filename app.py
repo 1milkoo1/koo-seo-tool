@@ -89,7 +89,7 @@ if uploaded_file:
     k_col = next((c for c in cols if '키워드' in str(c)), None)
     if p_col and k_col:
         col1, col2 = st.columns([1, 4])
-        with col1: process_btn = st.button("✨무한 셔플 시작")
+        with col1: process_btn = st.button(" ✨ 무한 셔플 시작! ")
         with col2: st.markdown(f"**<div style='padding-top: 10px;'>📂 현재 가공 대기 리스트: {row_count:,}개</div>**", unsafe_allow_html=True)
         if process_btn:
             with st.spinner(f'{row_count:,}개의 상품명을 SEO 최적화 중입니다...'):
