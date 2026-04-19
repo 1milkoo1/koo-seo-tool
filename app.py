@@ -4,114 +4,113 @@ import re
 import random
 import io
 
-# --- 1. 보안 설정 ---
-def check_password():
-    if "password_correct" not in st.session_state:
-        st.session_state.password_correct = False
-    if st.session_state.password_correct:
-        return True
-    st.set_page_config(page_title="🔒 보안 접속", layout="centered")
-    st.title("🔒 KOO SEO 가공툴 접속")
-    password = st.text_input("비밀번호를 입력하세요", type="password")
-    if st.button("접속하기", use_container_width=True):
-        if password == "1234":
-            st.session_state.password_correct = True
-            st.rerun()
-        else:
-            st.error("비밀번호가 틀렸습니다.")
-    return False
+# 1. 매칭용 텍스트 정제 (특수문자, 공백 무시)
+def clean_for_match(text):
+    if not text: return ""
+    return re.sub(r'[^가-힣a-zA-Z0-9]', '', str(text))
 
-if not check_password():
-    st.stop()
-
-# --- 2. 데이터 및 로직 ---
-FORBIDDEN_WORDS = ['돌돌이', '벨루아', '라떼', '이지라이프', '굿라이프', '슈슈앤', '플랜홈', '원마운트', '액티브원', '라테', '네추럴', '잔플라워', '그레타', '이지', '라이프홈']
-CORE_ITEMS = ['정리함', '수납박스', '수납함', '스틱', '썬캡', '버킷햇', '거치대', '보관함', '트레이', '케이스', '머플러', '거울', '물주머니', '찜질팩', '안대', '마스크', '등산스틱']
-COLORS = ['화이트', '블랙', '그레이', '아이보리', '베이지', '투명', '블루', '핑크', '그린', '레드', '옐로우', '네이비', '오렌지', '차콜', '스카이', '퍼플', '옐로', '브라운', '스노우']
-
-def refine_final_naming(text, original_p):
-    # 특수문자 제거
-    clean_text = re.sub(r'[^a-zA-Z0-9가-힣\s\(\)\[\]\-\_\/\&\,\.]', ' ', text)
-    words = clean_text.split()
-    if not words: return ""
+# 2. SEO 최적화 및 중복 단어 필터링 (순서 유지형)
+def seo_optimized_cleaner(keyword, body_list, tail_list):
+    """
+    [절대 규칙]
+    - 입력을 [키워드 -> 본문 -> 단위 -> 색상] 순으로 유지
+    - 앞서 등장한 단어가 뒤의 단어를 포함하면 뒤의 단어를 삭제 (긴 단어 우선 생존)
+    """
+    all_candidates = []
+    if keyword: all_candidates.append(keyword)
+    all_candidates.extend(body_list)
+    all_candidates.extend(tail_list)
     
-    final_words = []
-    for word in words:
-        is_duplicate = False
-        for checked in final_words:
-            if word == checked or (len(word) >= 2 and len(checked) >= 2 and (word in checked or checked in word)):
-                is_duplicate = True; break
-        if not is_duplicate: final_words.append(word)
+    all_candidates = [str(w).strip() for w in all_candidates if str(w).strip() and str(w).strip().lower() != 'nan']
     
-    # [중요] 색상 단어가 연속되면 공백 제거
-    processed_text = " ".join(final_words)
-    for i in range(len(COLORS)):
-        for j in range(len(COLORS)):
-            # '블랙 블루' -> '블랙블루' 로 변경
-            processed_text = processed_text.replace(f"{COLORS[i]} {COLORS[j]}", f"{COLORS[i]}{COLORS[j]}")
+    final_res = []
+    for i, word in enumerate(all_candidates):
+        is_redundant = False
+        for j, other in enumerate(all_candidates):
+            if i == j: continue
+            # 완전 일치 중복 제거 (먼저 나온 쪽 유지)
+            if word == other and i > j:
+                is_redundant = True
+                break
+            # 포함 관계 제거 (긴 단어 안에 짧은 단어가 있으면 짧은 쪽 삭제)
+            if len(word) < len(other) and word in other:
+                is_redundant = True
+                break
+        if not is_redundant:
+            final_res.append(word)
             
-    found_core = next((item for item in CORE_ITEMS if item in original_p), "")
-    if found_core and not any(found_core in w for w in processed_text.split()):
-        words_list = processed_text.split()
-        words_list.insert(min(len(words_list), 2), found_core)
-        processed_text = " ".join(words_list)
-        
-    return processed_text
+    return final_res
 
-def advanced_refine_engine(row, p_col, k_col):
+# 3. 핵심 조립 엔진
+def v8_30_engine(row, master_df, k_col, p_col):
     try:
-        raw_p = str(row[p_col]).strip() if pd.notna(row[p_col]) else ""
-        raw_k = str(row[k_col]).strip() if pd.notna(row[k_col]) else ""
-        if not raw_p: return ""
-        
-        temp_p = raw_p.replace('+', ' ')
-        spec_pat = r'([0-9]+(?:\.[0-9]+)?(?:cm|mm|m|L|ml|kg|g|단|칸|종|구|p|개|세트|EA|set))'
-        temp_p = re.sub(spec_pat, r' \1 ', temp_p)
-        
-        # 색상 앞뒤 공백 넣기 (나중에 합치기 위해 일단 분리)
-        for c in COLORS: temp_p = temp_p.replace(c, f" {c} ")
-        
-        specs_in_p = re.findall(spec_pat, temp_p, re.IGNORECASE)
+        raw_k = str(row.get(k_col, '')).strip()
         k_list = [k.strip() for k in re.split(r'[,|/]+', raw_k) if len(k.strip()) >= 2]
-        safe_keywords = [k for k in k_list if not any(fw in k for fw in FORBIDDEN_WORDS)]
-        selected_k = random.choice(safe_keywords) if safe_keywords else ""
-        
-        front_specs = [s for s in specs_in_p if any(u in s for u in ['단', '칸', '종', '구'])]
-        measure_specs = [s for s in specs_in_p if any(u in s.lower() for u in ['cm', 'mm', 'm', 'l', 'ml', 'kg', 'g'])]
-        quantity = [s for s in specs_in_p if any(u in s.lower() for u in ['p', '개', 'ea'])]
-        set_word = "세트" if any(x in temp_p.lower() for x in ["세트", "set"]) else ""
-        combined_qty = quantity[0] if quantity else (set_word if set_word else "")
-        
-        clean_p = temp_p
-        for s in specs_in_p + COLORS + FORBIDDEN_WORDS + ["세트", "set"]: clean_p = clean_p.replace(s, " ")
-        p_words = [w for w in clean_p.split() if len(w) >= 2]
-        core_name = p_words[-1] if p_words else ""
-        
-        color_vals = [c for c in COLORS if c in temp_p]
-        color_str = " ".join(color_vals) # 일단 띄어서 합침
-        
-        seo_list = [s for s in [selected_k, measure_specs[0] if measure_specs else None, front_specs[0] if front_specs else None, core_name, combined_qty, color_str] if s]
-        return refine_final_naming(" ".join(seo_list), raw_p)
-    except: return raw_p
+        selected_k = random.choice(k_list) if k_list else ""
 
-# --- 3. 화면 구성 ---
-st.title("🧚 KOO전용 SEO 상품명 가공 마스터")
-uploaded_file = st.file_uploader("가공할 엑셀 파일을 업로드하세요", type=["xlsx"])
-if uploaded_file:
-    df_raw = pd.read_excel(uploaded_file)
-    row_count = len(df_raw)
-    cols = df_raw.columns.tolist()
-    p_col = next((c for c in cols if '상품명' in str(c) and '최종' not in str(c)), None)
-    k_col = next((c for c in cols if '키워드' in str(c)), None)
-    if p_col and k_col:
-        st.info(f"📂 현재 가공 대기 리스트: {row_count:,}개")
-        process_btn = st.button("✨ 무한 랜덤조합 가공 시작", use_container_width=True)
-        if process_btn:
-            with st.spinner('최적화 중...'):
-                df_raw['최종_조합_상품명'] = df_raw.apply(lambda row: advanced_refine_engine(row, p_col, k_col), axis=1)
-                st.success("✅ 가공 완료!")
-                st.dataframe(df_raw[[p_col, '최종_조합_상품명']], use_container_width=True)
-                out = io.BytesIO()
-                with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
-                    df_raw.to_excel(writer, index=False)
-                st.download_button("📥 가공 결과 다운로드", out.getvalue(), "KOO_SEO_Result.xlsx", use_container_width=True)
+        orig_name = str(row.get(p_col, '')).strip()
+        clean_orig = clean_for_match(orig_name)
+        master_match = master_df[master_df.iloc[:, 0].apply(clean_for_match) == clean_orig]
+
+        if not master_match.empty:
+            m_data = master_match.iloc[0]
+            
+            # 사전 데이터 직접 수집
+            noun = str(m_data.iloc[2]).strip()
+            mods = [str(m_data.iloc[i]).strip() for i in range(3, 7) if str(m_data.iloc[i]).strip()]
+            info_tails = [str(m_data.iloc[i]).strip() for i in range(7, 10) if str(m_data.iloc[i]).strip()]
+            color_tail = [str(m_data.iloc[10]).strip()] if str(m_data.iloc[10]).strip() and str(m_data.iloc[10]).lower() != 'nan' else []
+
+            # 세트 제거 로직
+            has_quantity = any(re.search(r'\d', str(t)) for t in info_tails)
+            if has_quantity:
+                selected_k = selected_k.replace("세트", "").strip()
+                noun = noun.replace("세트", "").strip()
+                mods = [m.replace("세트", "").strip() for m in mods]
+                info_tails = [t.replace("세트", "").strip() for t in info_tails]
+
+            mix_body = [noun] + mods
+            random.shuffle(mix_body)
+
+            final_list = seo_optimized_cleaner(selected_k, mix_body, info_tails + color_tail)
+            return " ".join(final_list).strip()
+        else:
+            return f"[사전미등록] {orig_name}"
+    except Exception as e:
+        return f"ERROR: {str(e)}"
+
+# 4. UI
+st.set_page_config(page_title="KOO전용 상품명 마스터 V8.30", layout="wide")
+st.title("🧚KOO전용 상품명 마스터 V8.30")
+
+master_file = st.sidebar.file_uploader("1. 사전(Master) 업로드", type=["xlsx"])
+target_file = st.file_uploader("2. 작업 대상(Target) 업로드", type=["xlsx"])
+
+if master_file and target_file:
+    raw_m_df = pd.read_excel(master_file, header=None)
+    header_row_idx = 0
+    for i, r in raw_m_df.iterrows():
+        if '명사' in r.values:
+            header_row_idx = i
+            break
+    m_df = pd.read_excel(master_file, skiprows=header_row_idx).fillna("")
+    
+    t_df = pd.read_excel(target_file).fillna("")
+    t_df.columns = [str(c).strip() for c in t_df.columns]
+    
+    st.info(f"📂 현재 가공 대기 리스트: {len(t_df)}개 상품")
+
+    p_col = next((c for c in t_df.columns if '상품명' in str(c) and '최종' not in str(c)), t_df.columns[0])
+    k_col = next((c for c in t_df.columns if '키워드' in str(c)), None)
+
+    if st.button("✨랜덤조합 가공 시작"):
+        with st.spinner("KOO 마스터 엔진 가동 중..."):
+            t_df['최종_조합_상품명'] = t_df.apply(lambda row: v8_30_engine(row, m_df, k_col, p_col), axis=1)
+        
+        st.success("✅ 가공 완료!")
+        st.dataframe(t_df[[p_col, '최종_조합_상품명']].head(500), use_container_width=True)
+        
+        out = io.BytesIO()
+        with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
+            t_df.to_excel(writer, index=False)
+        st.download_button("📥 결과 다운로드", out.getvalue(), "KOO_MASTER_V8_30_Result.xlsx")
