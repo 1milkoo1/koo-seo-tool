@@ -122,7 +122,7 @@ def v8_engine(idx, row, master_df, k_col, p_col, prev_keywords, run_seed, forbid
 
 # --- UI 레이아웃 ---
 st.set_page_config(page_title="KOO전용 V8.81_FINAL", layout="wide")
-st.title("🧚 KOO 마스터 V9.0")
+st.title("🧚🏻‍♀️KOO 마스터 V9.0")
 
 if 'run_count' not in st.session_state:
     st.session_state.run_count = 0
