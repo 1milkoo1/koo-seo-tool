@@ -9,15 +9,15 @@ def clean_for_match(text):
     if not text: return ""
     return re.sub(r'[^가-힣a-zA-Z0-9]', '', str(text))
 
-# 2. 금지어 필터링 엔진 (덩어리 삭제)
+# 2. 금지어 필터링 엔진 (완전 일치 삭제 - EXACT MATCH)
 def apply_forbidden_filter(word_list, forbidden_set):
     if not forbidden_set:
         return word_list
     cleaned = []
     for word in word_list:
         low_word = str(word).lower().strip()
-        is_forbidden = any(f in low_word for f in forbidden_set if f)
-        if not is_forbidden:
+        # [변경] 부분 포함이 아니라 '완전 일치'할 때만 필터링
+        if low_word not in forbidden_set:
             cleaned.append(word)
     return cleaned
 
@@ -25,7 +25,7 @@ def apply_forbidden_filter(word_list, forbidden_set):
 def seo_optimized_cleaner(keyword, mods_list, person_info, noun, count_info, unit_info, color_tail, forbidden_set):
     p_part = [str(person_info).strip()] if str(person_info).strip() and str(person_info).lower() != 'nan' else []
     
-    # [수정] 수식어 내 쉼표(,) 구분 단어 분리 로직
+    # 수식어 내 쉼표(,) 구분 단어 분리
     refined_mods = []
     for m in mods_list:
         if ',' in str(m):
@@ -53,10 +53,13 @@ def seo_optimized_cleaner(keyword, mods_list, person_info, noun, count_info, uni
     c_part = [str(c).strip() for c in color_tail if str(c).strip() and str(c).strip().lower() != 'nan']
     
     current_parts = cleaned_front + p_part + [noun] + count_part + unit_part + c_part
+    
+    # 금지어 필터링 실행 (완전 일치 방식 적용)
     current_parts = apply_forbidden_filter(current_parts, forbidden_set)
     
     while len(" ".join(current_parts)) >= 35 and len(cleaned_front) > 1:
         cleaned_front.pop()
+        # 재조립 시에도 필터링 유지
         current_parts = apply_forbidden_filter(cleaned_front + p_part + [noun] + count_part + unit_part + c_part, forbidden_set)
             
     return current_parts
@@ -121,8 +124,8 @@ def v8_engine(idx, row, master_df, k_col, p_col, prev_keywords, run_seed, forbid
         return f"ERROR: {str(e)}"
 
 # --- UI 레이아웃 ---
-st.set_page_config(page_title="KOO전용 V8.81_FINAL", layout="wide")
-st.title("🧚🏻‍♀️KOO 마스터 V9.0")
+st.set_page_config(page_title="KOO_V8.81_Exact", layout="wide")
+st.title("🧚🏻‍♀️KOO 마스터 V9.0 (완전 일치 필터 버전)")
 
 if 'run_count' not in st.session_state:
     st.session_state.run_count = 0
@@ -142,6 +145,7 @@ if master_file and target_file:
         try:
             f_df = pd.read_excel(master_file, sheet_name='금지어')
             forbidden_list = f_df.iloc[:, 0].dropna().astype(str).tolist()
+            # 소문자로 통일하여 비교 효율 극대화
             forbidden_set = {str(f).strip().lower() for f in forbidden_list if f.strip()}
             st.sidebar.success(f"✅ 금지어 {len(forbidden_set)}개 로드 완료")
         except:
@@ -152,7 +156,6 @@ if master_file and target_file:
         p_col = next((c for c in t_df.columns if '상품명' in str(c) and '최종' not in str(c)), t_df.columns[0])
         k_col = next((c for c in t_df.columns if '키워드' in str(c)), None)
 
-        # [수정] 누락되었던 가공 대기 리스트 안내 표시
         st.info(f"📂 현재 가공 대기 리스트: {len(t_df)}개 상품")
 
         if st.button("✨ 통합 최적화 가공 시작"):
@@ -170,6 +173,6 @@ if master_file and target_file:
             out = io.BytesIO()
             with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
                 t_df.to_excel(writer, index=False)
-            st.download_button(label="📥 결과 다운로드", data=out.getvalue(), file_name=f"KOO_V8_81_Result.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(label="📥 결과 다운로드", data=out.getvalue(), file_name=f"KOO_V8_81_Exact_Result.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
         st.error(f"오류 발생: {e}")
