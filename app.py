@@ -9,14 +9,13 @@ def clean_for_match(text):
     if not text: return ""
     return re.sub(r'[^가-힣a-zA-Z0-9]', '', str(text))
 
-# 2. 금지어 필터링 엔진 (완전 일치 삭제 - EXACT MATCH)
+# 2. 금지어 필터링 엔진 (완전 일치 삭제)
 def apply_forbidden_filter(word_list, forbidden_set):
     if not forbidden_set:
         return word_list
     cleaned = []
     for word in word_list:
         low_word = str(word).lower().strip()
-        # [변경] 부분 포함이 아니라 '완전 일치'할 때만 필터링
         if low_word not in forbidden_set:
             cleaned.append(word)
     return cleaned
@@ -52,14 +51,12 @@ def seo_optimized_cleaner(keyword, mods_list, person_info, noun, count_info, uni
     unit_part = [str(unit_info).strip()] if str(unit_info).strip() and str(unit_info).lower() != 'nan' else []
     c_part = [str(c).strip() for c in color_tail if str(c).strip() and str(c).strip().lower() != 'nan']
     
+    # 조립 순서: 키워드/수식어 + 인원 + 명사 + 개수 + 단위 + 색상 (브랜드명 변수 brand_part는 제외됨)
     current_parts = cleaned_front + p_part + [noun] + count_part + unit_part + c_part
-    
-    # 금지어 필터링 실행 (완전 일치 방식 적용)
     current_parts = apply_forbidden_filter(current_parts, forbidden_set)
     
     while len(" ".join(current_parts)) >= 35 and len(cleaned_front) > 1:
         cleaned_front.pop()
-        # 재조립 시에도 필터링 유지
         current_parts = apply_forbidden_filter(cleaned_front + p_part + [noun] + count_part + unit_part + c_part, forbidden_set)
             
     return current_parts
@@ -79,6 +76,8 @@ def v8_engine(idx, row, master_df, k_col, p_col, prev_keywords, run_seed, forbid
 
         if not master_match.empty:
             m_data = master_match.iloc[0]
+            # m_data.iloc[1]은 브랜드명 열이므로 변수에만 담고 조합(final_parts)에는 사용하지 않음
+            brand_name = str(m_data.iloc[1]).strip() 
             noun = str(m_data.iloc[2]).strip()
             mods = [str(m_data.iloc[i]).strip() for i in range(3, 7) if str(m_data.iloc[i]).strip()]
             
@@ -112,6 +111,7 @@ def v8_engine(idx, row, master_df, k_col, p_col, prev_keywords, run_seed, forbid
                 person_info = person_info.replace("세트", "").strip(); count_info = count_info.replace("세트", "").strip()
                 unit_info = unit_info.replace("세트", "").strip(); mods = [m.replace("세트", "").strip() for m in mods]
 
+            # 브랜드명(brand_name)을 인자로 전달하지 않아 조합에서 원천 배제
             final_parts = seo_optimized_cleaner(selected_k, mods, person_info, noun, count_info, unit_info, color_tail, forbidden_set)
             
             final_str = " ".join(final_parts).strip()
@@ -123,9 +123,9 @@ def v8_engine(idx, row, master_df, k_col, p_col, prev_keywords, run_seed, forbid
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-# --- UI 레이아웃 ---
-st.set_page_config(page_title="KOO_V8.81_Exact", layout="wide")
-st.title("🧚🏻‍♀️KOO 마스터 V9.0 (완전 일치 필터 버전)")
+# --- UI 레이아웃 및 로직 ---
+st.set_page_config(page_title="KOO_V8.81_Exact_Final", layout="wide")
+st.title("🧚 KOO 마스터 V8.81 (브랜드 제외 + 완전일치)")
 
 if 'run_count' not in st.session_state:
     st.session_state.run_count = 0
@@ -145,7 +145,6 @@ if master_file and target_file:
         try:
             f_df = pd.read_excel(master_file, sheet_name='금지어')
             forbidden_list = f_df.iloc[:, 0].dropna().astype(str).tolist()
-            # 소문자로 통일하여 비교 효율 극대화
             forbidden_set = {str(f).strip().lower() for f in forbidden_list if f.strip()}
             st.sidebar.success(f"✅ 금지어 {len(forbidden_set)}개 로드 완료")
         except:
@@ -173,6 +172,6 @@ if master_file and target_file:
             out = io.BytesIO()
             with pd.ExcelWriter(out, engine='xlsxwriter') as writer:
                 t_df.to_excel(writer, index=False)
-            st.download_button(label="📥 결과 다운로드", data=out.getvalue(), file_name=f"KOO_V8_81_Exact_Result.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            st.download_button(label="📥 결과 다운로드", data=out.getvalue(), file_name=f"KOO_V8_81_Final_Result.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
         st.error(f"오류 발생: {e}")
